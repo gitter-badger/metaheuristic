@@ -15,7 +15,7 @@
  */
 package ai.metaheuristic.ai;
 
-import ai.metaheuristic.ai.data.DataSyncingService;
+import ai.metaheuristic.ai.dispatcher.data_syncing.DataSyncingService;
 import ai.metaheuristic.ai.dispatcher.batch.BatchService;
 import ai.metaheuristic.ai.dispatcher.commons.ArtifactCleanerAtDispatcher;
 import ai.metaheuristic.ai.dispatcher.exec_context.ExecContextSchedulerService;

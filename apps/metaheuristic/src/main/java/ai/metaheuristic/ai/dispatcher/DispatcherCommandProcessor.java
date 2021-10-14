@@ -125,7 +125,7 @@ public class DispatcherCommandProcessor {
         return assignedTask;
     }
 
-    private void checkProcessorId(ProcessorCommParamsYaml.ProcessorRequest request) {
+    private static void checkProcessorId(ProcessorCommParamsYaml.ProcessorRequest request) {
         if (request.processorCommContext ==null  || S.b(request.processorCommContext.processorId)) {
             // we throw ISE cos all checks have to be made early
             throw new IllegalStateException("#997.070 processorId is null");

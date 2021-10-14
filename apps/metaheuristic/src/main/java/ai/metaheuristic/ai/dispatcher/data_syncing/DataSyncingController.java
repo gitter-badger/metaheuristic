@@ -14,28 +14,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ai.metaheuristic.ai.data;
+package ai.metaheuristic.ai.dispatcher.data_syncing;
 
-import ai.metaheuristic.ai.Globals;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Service;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 /**
- * @author Serge
- * Date: 10/11/2021
- * Time: 12:59 AM
+ * User: Serg
+ * Date: 12.06.2017
+ * Time: 20:39
  */
-@Service
+@Controller
+@RequestMapping("/data")
 @Profile("data")
-@Slf4j
-@RequiredArgsConstructor
-public class DataSyncingService {
-    private final Globals globals;
+@PreAuthorize("isAuthenticated()")
+public class DataSyncingController {
 
-    public void sync() {
-
-
+    @GetMapping("/index")
+    public String index() {
+        return "data/index";
     }
+
 }
