@@ -180,10 +180,7 @@ public class DispatcherRequestor {
                 }
                 r.reportTaskProcessingResult = processorTaskService.reportTaskProcessingResult(ref);
             }
-            if (dispatcher.dispatcherLookup.dataSource &&
-                    System.currentTimeMillis() - lastRequestForData > globals.data.getSyncTimeout().toMillis() &&
-                    dispatcher.schedule.isCurrentTimeActive()) {
-
+            if (System.currentTimeMillis() - lastRequestForData > globals.data.getSyncTimeout().toMillis()) {
                 pcpy.dataSource = new ProcessorCommParamsYaml.DataSource(globals.data.primary, null);
                 lastRequestForData = System.currentTimeMillis();
             }
