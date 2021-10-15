@@ -17,6 +17,7 @@
 package ai.metaheuristic.ai;
 
 import ai.metaheuristic.ai.dispatcher.repositories.RefToDispatcherRepositories;
+import ai.metaheuristic.ai.utils.EnvProperty;
 import ai.metaheuristic.ai.utils.cleaner.CleanerInterceptor;
 import ai.metaheuristic.commons.S;
 import lombok.RequiredArgsConstructor;
