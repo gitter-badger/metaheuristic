@@ -20,6 +20,7 @@ import ai.metaheuristic.ai.dispatcher.DispatcherContext;
 import ai.metaheuristic.ai.dispatcher.beans.ExecContextImpl;
 import ai.metaheuristic.ai.dispatcher.beans.TaskImpl;
 import ai.metaheuristic.ai.dispatcher.data.ExecContextData;
+import ai.metaheuristic.ai.dispatcher.dispatcher_params.DispatcherParamsTopLevelService;
 import ai.metaheuristic.ai.dispatcher.event.DeleteExecContextEvent;
 import ai.metaheuristic.ai.dispatcher.repositories.ExecContextRepository;
 import ai.metaheuristic.ai.dispatcher.repositories.TaskRepository;
@@ -63,10 +64,10 @@ public class ExecContextTopLevelService {
     private final ExecContextFSM execContextFSM;
     private final ExecContextCache execContextCache;
     private final TaskRepository taskRepository;
-    private final ExecContextTaskAssigningService execContextTaskAssigningService;
+    private final ExecContextTaskAssigningTopLevelService execContextTaskAssigningTopLevelService;
     private final ExecContextTaskResettingService execContextTaskResettingService;
-    private final TaskSyncService taskSyncService;
     private final ExecContextReconciliationTopLevelService execContextReconciliationTopLevelService;
+    private final DispatcherParamsTopLevelService dispatcherParamsTopLevelService;
 
     private static boolean isManagerRole(String role) {
         switch (role) {
@@ -86,8 +87,45 @@ public class ExecContextTopLevelService {
             return new ExecContextApiData.ExecContextStateResult(raw.getErrorMessagesAsList());
         }
         boolean managerRole = authentication.getAuthorities().stream().anyMatch(o -> isManagerRole(o.getAuthority()));
-        ExecContextApiData.ExecContextStateResult r = ExecContextService.getExecContextStateResult(execContextId, raw, managerRole);
+        ExecContextApiData.ExecContextStateResult r = ExecContextUtils.getExecContextStateResult(execContextId, raw, managerRole);
+
+        // we'll calculate an info only for rootExecContext
+        ExecContextImpl ec = execContextCache.findById(execContextId);
+        if (ec!=null && ec.rootExecContextId==null) {
+            r.taskStateInfos = getTaskStateInfos(execContextId);
+        }
         return r;
+    }
+
+    private ExecContextApiData.TaskStateInfos getTaskStateInfos(Long execContextId) {
+        ExecContextApiData.TaskStateInfos stateInfos = new ExecContextApiData.TaskStateInfos();
+        List<Object[]> states = taskRepository.getTaskExecStates(execContextId);
+        for (Object[] obj : states) {
+            int execState = ((Number) obj[0]).intValue();
+            int count = ((Number) obj[1]).intValue();
+            stateInfos.taskInfos.add(new ExecContextApiData.TaskStateInfo(EnumsApi.TaskExecState.from(execState), count));
+        }
+        stateInfos.taskInfos.sort(Comparator.comparingInt(o -> o.execState.value));
+
+
+        List<Object[]> simpleTaskInfos = taskRepository.getSimpleTaskInfos(execContextId);
+        List<Long> longRunningIds = dispatcherParamsTopLevelService.getLongRunningTaskIds();
+
+        // https://stackoverflow.com/questions/31657036/getting-object-with-max-date-property-from-list-of-objects-java-8/31657274#31657274
+        Object[] obj = simpleTaskInfos.stream()
+                .filter(o-> o[2]!=null && EnumsApi.TaskExecState.isFinishedState(((Number) o[1]).intValue()) && !longRunningIds.contains(((Number) o[0]).longValue()))
+                .max(Comparator.comparing(o-> ((Number) o[2]).longValue()))
+                .orElse(null);
+
+        long countRunning = simpleTaskInfos.stream()
+                .filter(o-> EnumsApi.TaskExecState.IN_PROGRESS.value==((Number) o[1]).intValue() && !longRunningIds.contains(((Number) o[0]).longValue()))
+                .count();
+
+        //noinspection UnnecessaryLocalVariable
+        ExecContextApiData.NonLongRunning nonLongRunning = new ExecContextApiData.NonLongRunning( obj!=null ? ((Number)obj[2]).longValue() : null, (int) countRunning);
+        stateInfos.nonLongRunning = nonLongRunning;
+
+        return stateInfos;
     }
 
     public List<Long> storeAllConsoleResults(List<ProcessorCommParamsYaml.ReportTaskProcessingResult.SimpleTaskExecResult> results) {
@@ -126,13 +164,13 @@ public class ExecContextTopLevelService {
     }
 
     public void findTaskForRegisteringInQueue(Long execContextId) {
-        execContextSyncService.getWithSyncNullable(execContextId,
+        execContextSyncService.getWithSyncVoid(execContextId,
                 () -> findUnassignedTasksAndRegisterInQueueInternal(execContextId));
     }
 
     // this method is here to handle situation when a method with @Transactional is being called from lambda
-    private Void findUnassignedTasksAndRegisterInQueueInternal(Long execContextId) {
-        return execContextTaskAssigningService.findUnassignedTasksAndRegisterInQueue(execContextId);
+    private void findUnassignedTasksAndRegisterInQueueInternal(Long execContextId) {
+        execContextTaskAssigningTopLevelService.findUnassignedTasksAndRegisterInQueue(execContextId);
     }
 
     public OperationStatusRest changeExecContextState(String state, Long execContextId, DispatcherContext context) {
@@ -191,11 +229,11 @@ public class ExecContextTopLevelService {
             return task.id;
         }
         try {
-            taskSyncService.getWithSyncNullable(task.id,
+            TaskSyncService.getWithSyncNullable(task.id,
                     () -> storeExecResultInternal(result));
         } catch (ObjectOptimisticLockingFailureException e) {
             log.warn("#210.115 ObjectOptimisticLockingFailureException as caught, let try to store exec result one more time");
-            taskSyncService.getWithSyncNullable(task.id,
+            TaskSyncService.getWithSyncNullable(task.id,
                     () -> storeExecResultInternal(result));
         }
         return task.id;

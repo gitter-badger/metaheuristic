@@ -177,7 +177,6 @@ public class Schedulers {
 
         private final Globals globals;
         private final ExecContextSchedulerService execContextSchedulerService;
-        private final ArtifactCleanerAtDispatcher artifactCleanerAtDispatcher;
         private final ExecContextTopLevelService execContextTopLevelService;
         private final ExecContextVariableStateTopLevelService execContextVariableStateTopLevelService;
         private final TaskCheckCachingTopLevelService taskCheckCachingTopLevelService;
@@ -215,7 +214,6 @@ public class Schedulers {
             if (globals.dispatcher.asset.mode==EnumsApi.DispatcherAssetMode.source) {
                 return;
             }
-            MetaheuristicThreadLocal.setSchedule();
             log.info("Invoking execContextTopLevelService.findUnassignedTasksAndRegisterInQueue()");
             execContextTopLevelService.findUnassignedTasksAndRegisterInQueue();
         }

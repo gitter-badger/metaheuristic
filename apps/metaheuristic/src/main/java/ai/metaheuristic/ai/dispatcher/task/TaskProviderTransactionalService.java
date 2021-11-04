@@ -17,12 +17,14 @@
 package ai.metaheuristic.ai.dispatcher.task;
 
 import ai.metaheuristic.ai.Enums;
-import ai.metaheuristic.ai.dispatcher.beans.ExecContextImpl;
+import ai.metaheuristic.ai.data.DispatcherData;
 import ai.metaheuristic.ai.dispatcher.beans.Processor;
 import ai.metaheuristic.ai.dispatcher.beans.TaskImpl;
+import ai.metaheuristic.ai.dispatcher.data.QuotasData;
+import ai.metaheuristic.ai.dispatcher.data.TaskData;
 import ai.metaheuristic.ai.dispatcher.event.*;
-import ai.metaheuristic.ai.dispatcher.exec_context.ExecContextService;
 import ai.metaheuristic.ai.dispatcher.exec_context.ExecContextStatusService;
+import ai.metaheuristic.ai.dispatcher.quotas.QuotasUtils;
 import ai.metaheuristic.ai.dispatcher.repositories.TaskRepository;
 import ai.metaheuristic.ai.utils.CollectionUtils;
 import ai.metaheuristic.ai.yaml.communication.keep_alive.KeepAliveResponseParamYaml;
@@ -30,7 +32,6 @@ import ai.metaheuristic.ai.yaml.processor_status.ProcessorStatusYaml;
 import ai.metaheuristic.ai.yaml.processor_status.ProcessorStatusYamlUtils;
 import ai.metaheuristic.api.EnumsApi;
 import ai.metaheuristic.api.data.ParamsVersion;
-import ai.metaheuristic.api.data.exec_context.ExecContextParamsYaml;
 import ai.metaheuristic.api.data.task.TaskParamsYaml;
 import ai.metaheuristic.commons.S;
 import ai.metaheuristic.commons.exceptions.DowngradeNotSupportedException;
@@ -44,7 +45,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.yaml.snakeyaml.error.YAMLException;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static ai.metaheuristic.ai.dispatcher.task.TaskQueue.*;
+import static ai.metaheuristic.ai.dispatcher.task.TaskQueueSyncStaticService.checkWriteLockPresent;
 
 /**
  * @author Serge
@@ -67,11 +70,8 @@ public class TaskProviderTransactionalService {
 
     private final TaskRepository taskRepository;
     private final ExecContextStatusService execContextStatusService;
-    private final ExecContextService execContextService;
     private final ApplicationEventPublisher eventPublisher;
     private final EventPublisherService eventPublisherService;
-
-    private final TaskQueue taskQueue = new TaskQueue();
 
     /**
      * this Map contains an AtomicLong which contains millisecond value which is specify how long to not use concrete processor
@@ -82,76 +82,18 @@ public class TaskProviderTransactionalService {
      */
     private final Map<Long, AtomicLong> bannedSince = new HashMap<>();
 
-    public void processDeletedExecContext(TaskQueueCleanByExecContextIdEvent event) {
-        taskQueue.deleteByExecContextId(event.execContextId);
-    }
-
-    public void registerTask(Long execContextId, Long taskId) {
-        if (taskQueue.alreadyRegistered(taskId)) {
-            return;
-        }
-
-        ExecContextImpl ec =  execContextService.findById(execContextId);
-        if (ec==null) {
-            log.warn("#317.010 Can't register task #{}, execContext #{} doesn't exist", taskId, execContextId);
-            return;
-        }
-        final ExecContextParamsYaml execContextParamsYaml = ec.getExecContextParamsYaml();
-
-        TaskImpl task = taskRepository.findById(taskId).orElse(null);
-        if (task == null) {
-            log.warn("#317.015 Can't register task #{}, task doesn't exist", taskId);
-            return;
-        }
-        final TaskParamsYaml taskParamYaml;
-        try {
-            taskParamYaml = TaskParamsYamlUtils.BASE_YAML_UTILS.to(task.getParams());
-        } catch (YAMLException e) {
-            String es = S.f("#317.020 Task #%s has broken params yaml and will be skipped, error: %s, params:\n%s", task.getId(), e.toString(), task.getParams());
-            log.error(es, e.getMessage());
-            eventPublisher.publishEvent(new TaskFinishWithErrorEvent(task.id, es));
-            return;
-        }
-
-        ExecContextParamsYaml.Process p = execContextParamsYaml.findProcess(taskParamYaml.task.processCode);
-        if (p==null) {
-            log.warn("#317.025 Can't register task #{}, process {} doesn't exist in execContext #{}", taskId, taskParamYaml.task.processCode, execContextId);
-            return;
-        }
-
-        final QueuedTask queuedTask = new QueuedTask(EnumsApi.FunctionExecContext.external, task.execContextId, taskId, task, taskParamYaml, p.tags, p.priority);
-        taskQueue.addNewTask(queuedTask);
-    }
-
-    public void deRegisterTask(Long execContextId, Long taskId) {
-        taskQueue.deRegisterTask(execContextId, taskId);
-    }
-
-    public void lock(Long execContextId) {
-        taskQueue.lock(execContextId);
-    }
-
-    public boolean isQueueEmpty() {
-        return taskQueue.isQueueEmpty();
-    }
-
-    public void startTaskProcessing(StartTaskProcessingEvent event) {
-        taskQueue.startTaskProcessing(event.execContextId, event.taskId);
-    }
-
-    public void registerInternalTask(Long sourceCodeId, Long execContextId, Long taskId, TaskParamsYaml taskParamYaml) {
-        if (taskQueue.alreadyRegistered(taskId)) {
-            return;
-        }
-        taskQueue.addNewInternalTask(execContextId, taskId, taskParamYaml);
-        eventPublisher.publishEvent(new TaskWithInternalContextEvent(sourceCodeId, execContextId, taskId));
-    }
-
     @Nullable
     @Transactional
-    public TaskImpl findUnassignedTaskAndAssign(Processor processor, ProcessorStatusYaml psy, boolean isAcceptOnlySigned) {
+    public TaskData.AssignedTask findUnassignedTaskAndAssign(Processor processor, ProcessorStatusYaml psy, boolean isAcceptOnlySigned, final DispatcherData.TaskQuotas currentQuotas) {
+        checkWriteLockPresent();
 
-        if (isQueueEmpty()) {
+        if (TaskQueueService.isQueueEmpty()) {
+            return null;
+        }
+
+        // Environment of Processor must be initialized before getting any task
+        if (psy.env==null) {
+            log.error("#317.070 Processor {} has empty env.yaml", processor.id);
             return null;
         }
 
@@ -163,9 +105,10 @@ public class TaskProviderTransactionalService {
         AllocatedTask resultTask = null;
         List<QueuedTask> forRemoving = new ArrayList<>();
 
+        QuotasData.ActualQuota quota = null;
         KeepAliveResponseParamYaml.ExecContextStatus statuses = execContextStatusService.getExecContextStatuses();
         try {
-            GroupIterator iter = taskQueue.getIterator();
+            GroupIterator iter = TaskQueueService.getIterator();
             while (iter.hasNext()) {
                 AllocatedTask allocatedTask;
                 try {
@@ -225,18 +168,14 @@ public class TaskProviderTransactionalService {
                     continue;
                 }
 
-                if (psy.env==null) {
-                    log.error("#317.070 Processor {} has empty env.yaml", processor.id);
-                }
-
-                // check of tags
-                if (!CollectionUtils.checkTagAllowed(queuedTask.tags, psy.env==null ? null : psy.env.tags)) {
-                    log.debug("#317.077 Check CollectionUtils.checkTagAllowed(queuedTask.tags, psy.env==null ? null : psy.env.tags) was failed");
+                // check of tag
+                if (!CollectionUtils.checkTagAllowed(queuedTask.tag, psy.env.tags)) {
+                    log.debug("#317.077 Check of !CollectionUtils.checkTagAllowed(queuedTask.tag, psy.env.tags) was failed");
                     continue;
                 }
 
                 if (!S.b(queuedTask.taskParamYaml.task.function.env)) {
-                    String interpreter = psy.env!=null ? psy.env.getEnvs().get(queuedTask.taskParamYaml.task.function.env) : null;
+                    String interpreter = psy.env.getEnvs().get(queuedTask.taskParamYaml.task.function.env);
                     if (interpreter == null) {
                         log.warn("#317.080 Can't assign task #{} to processor #{} because this processor doesn't have defined interpreter for function's env {}",
                                 queuedTask.task.getId(), processor.id, queuedTask.taskParamYaml.task.function.env
@@ -269,6 +208,12 @@ public class TaskProviderTransactionalService {
                     continue;
                 }
 
+                quota = QuotasUtils.getQuotaAmount(psy.env.quotas, queuedTask.tag);
+
+                if (!QuotasUtils.isEnough(psy.env.quotas, currentQuotas, quota)) {
+                    continue;
+                }
+
                 resultTask = allocatedTask;
                 // check that downgrading is being supported
                 try {
@@ -292,7 +237,7 @@ public class TaskProviderTransactionalService {
             }
         }
         finally {
-            taskQueue.removeAll(forRemoving);
+            TaskQueueService.removeAll(forRemoving);
         }
 
         if (resultTask == null) {
@@ -319,13 +264,36 @@ public class TaskProviderTransactionalService {
         t.setResultResourceScheduledOn(0);
 
         taskRepository.save(t);
-
         resultTask.assigned = true;
 
         eventPublisherService.publishUnAssignTaskTxEvent(new UnAssignTaskTxEvent(t.execContextId, t.id));
         eventPublisherService.publishStartTaskProcessingTxEvent(new StartTaskProcessingTxEvent(t.execContextId, t.id));
 
-        return t;
+        final AllocatedTask finalResultTask = resultTask;
+        if (quota==null) {
+            throw new IllegalStateException("(quota==null)");
+        }
+        final QuotasData.ActualQuota finalQuota = quota;
+        eventPublisher.publishEvent(new PostTaskAssigningTxEvent(()->{
+            currentQuotas.allocated.add(new DispatcherData.AllocatedQuotas(t.id, finalResultTask.queuedTask.tag, finalQuota.amount));
+        }));
+        eventPublisher.publishEvent(new PostTaskAssigningRollbackTxEvent (()->{
+            finalResultTask.assigned = false;
+        }));
+
+        return new TaskData.AssignedTask(t, resultTask.queuedTask.tag, quota.amount);
+    }
+
+    @SuppressWarnings("MethodMayBeStatic")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleStartTaskProcessingTxEvent(PostTaskAssigningTxEvent event) {
+        event.runnable.run();
+    }
+
+    @SuppressWarnings("MethodMayBeStatic")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_ROLLBACK)
+    public void handleStartTaskProcessingRollbackTxEvent(PostTaskAssigningRollbackTxEvent event) {
+        event.runnable.run();
     }
 
     private static boolean notAllFunctionsReady(Long processorId, ProcessorStatusYaml status, TaskParamsYaml taskParamYaml) {
@@ -347,35 +315,5 @@ public class TaskProviderTransactionalService {
             log.debug("#317.180 function {} at processor #{} isn't ready, state: {}", functionConfig.code, processorId, ds==null ? "'not prepared yet'" : ds.functionState);
             result.set(true);
         }
-    }
-
-    public void deregisterTasksByExecContextId(Long execContextId) {
-        taskQueue.deleteByExecContextId(execContextId);
-    }
-
-    public boolean setTaskExecState(Long execContextId, Long taskId, EnumsApi.TaskExecState state) {
-        return taskQueue.setTaskExecState(execContextId, taskId, state);
-    }
-
-    @Nullable
-    public TaskGroup getFinishedTaskGroup(Long execContextId) {
-        return taskQueue.getFinishedTaskGroup(execContextId);
-    }
-
-    @Nullable
-    public AllocatedTask getTaskExecState(Long execContextId, Long taskId) {
-        return taskQueue.getTaskExecState(execContextId, taskId);
-    }
-
-    public Map<Long, AllocatedTask> getTaskExecStates(Long execContextId) {
-        return taskQueue.getTaskExecStates(execContextId);
-    }
-
-    public void unAssignTask(UnAssignTaskEvent event) {
-        taskQueue.deRegisterTask(event.execContextId, event.taskId);
-    }
-
-    public boolean allTaskGroupFinished(Long execContextId) {
-        return taskQueue.allTaskGroupFinished(execContextId);
     }
 }

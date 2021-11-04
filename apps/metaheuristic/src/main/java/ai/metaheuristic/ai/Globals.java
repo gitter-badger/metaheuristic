@@ -42,6 +42,8 @@ import org.springframework.util.unit.DataUnit;
 import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -628,7 +630,16 @@ public class Globals {
 
         logGlobals();
         logSystemEnvs();
+        logGarbageCollectors();
         logDeprecated();
+    }
+
+    private static void logGarbageCollectors() {
+        log.info("Garbage collectors:");
+        List<GarbageCollectorMXBean> beans = ManagementFactory.getGarbageCollectorMXBeans();
+        for (GarbageCollectorMXBean bean : beans) {
+            log.info("'\t"+ bean.getName());
+        }
     }
 
     public void setBranding(String branding) {

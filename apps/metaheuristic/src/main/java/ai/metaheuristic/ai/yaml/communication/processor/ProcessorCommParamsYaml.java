@@ -124,6 +124,13 @@ public class ProcessorCommParamsYaml implements BaseParams {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    public static class Quotas {
+        public int current;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ProcessorRequest {
         @Nullable
         public ProcessorCommContext processorCommContext;
@@ -163,6 +170,7 @@ public class ProcessorCommParamsYaml implements BaseParams {
     }
 
     public final List<ProcessorRequest> requests = new ArrayList<>();
+    public final Quotas quotas = new Quotas();
 
     @Nullable
     public DataSource dataSource;

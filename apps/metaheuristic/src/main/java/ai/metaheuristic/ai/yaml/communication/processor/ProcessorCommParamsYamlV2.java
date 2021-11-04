@@ -122,19 +122,21 @@ public class ProcessorCommParamsYamlV2 implements BaseParams {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    public static class QuotasV2 {
+        public int current;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ProcessorRequestV2 {
-        @Nullable
-        public ProcessorCommContextV2 processorCommContext;
-        @Nullable
-        public RequestProcessorIdV2 requestProcessorId;
-        @Nullable
-        public RequestTaskV2 requestTask;
-        @Nullable
-        public ReportTaskProcessingResultV2 reportTaskProcessingResult;
-        @Nullable
-        public CheckForMissingOutputResourcesV2 checkForMissingOutputResources;
-        @Nullable
-        public ResendTaskOutputResourceResultV2 resendTaskOutputResourceResult;
+        public @Nullable ProcessorCommContextV2 processorCommContext;
+        public @Nullable RequestProcessorIdV2 requestProcessorId;
+        public @Nullable RequestTaskV2 requestTask;
+        public @Nullable ReportTaskProcessingResultV2 reportTaskProcessingResult;
+        public @Nullable CheckForMissingOutputResourcesV2 checkForMissingOutputResources;
+        public @Nullable ResendTaskOutputResourceResultV2 resendTaskOutputResourceResult;
+
 
         public String processorCode;
 
@@ -164,6 +166,7 @@ public class ProcessorCommParamsYamlV2 implements BaseParams {
 
     @Nullable
     public DataSourceV2 dataSource;
+    public final ProcessorCommParamsYamlV2.QuotasV2 quotas = new ProcessorCommParamsYamlV2.QuotasV2();
 
 
 }

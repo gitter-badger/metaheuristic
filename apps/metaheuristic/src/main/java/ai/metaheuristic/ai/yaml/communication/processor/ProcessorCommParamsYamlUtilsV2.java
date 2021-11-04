@@ -89,6 +89,7 @@ public class ProcessorCommParamsYamlUtilsV2
             }
             t.processorCode = v2.processorCode;
         }
+        trg.quotas.current = src.quotas.current;
         trg.dataSource = toDataSource(src.dataSource);
         return trg;
     }
@@ -105,7 +106,7 @@ public class ProcessorCommParamsYamlUtilsV2
 
     @NonNull
     @Override
-    public Void downgradeTo(@NonNull Void v1) {
+    public Void downgradeTo(@NonNull Void v2) {
         return null;
 /*
         ProcessorCommParamsYamlV3 t = new ProcessorCommParamsYamlV3();
