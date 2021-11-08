@@ -30,7 +30,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.5.5</version>
+        <version>2.5.6</version>
         <relativePath/>
     </parent>
 
@@ -47,7 +47,7 @@
         <dependency>
             <groupId>ai.metaheuristic</groupId>
             <artifactId>mh-commons</artifactId>
-            <version>4.8.1</version>
+            <version>4.8.2</version>
         </dependency>
 
         <dependency>
@@ -66,7 +66,6 @@
             <!--Apache-2.0-->
             <groupId>nz.net.ultraq.thymeleaf</groupId>
             <artifactId>thymeleaf-layout-dialect</artifactId>
-            <version>${thymeleaf-layout-dialect.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.codehaus.groovy</groupId>
@@ -164,6 +163,7 @@
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
+            <!--suppress MavenPackageUpdate -->
             <version>1.15</version>
         </dependency>
 
@@ -261,6 +261,7 @@
             <!--License	MIT-->
             <groupId>org.webjars</groupId>
             <artifactId>jquery</artifactId>
+            <!--suppress MavenPackageUpdate -->
             <version>3.2.1</version>
         </dependency>
 
@@ -276,6 +277,7 @@
             <!--License	Apache 2.0-->
             <groupId>org.webjars</groupId>
             <artifactId>bootstrap</artifactId>
+            <!--suppress MavenPackageUpdate -->
             <version>3.3.7</version>
             <exclusions>
                 <exclusion>
