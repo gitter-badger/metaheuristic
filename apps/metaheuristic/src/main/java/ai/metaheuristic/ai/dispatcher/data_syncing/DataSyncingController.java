@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
  * Time: 20:39
  */
 @Controller
-@RequestMapping("/data")
+@RequestMapping("/rest/data-sync")
 @Profile("data")
 @PreAuthorize("isAuthenticated()")
 public class DataSyncingController {

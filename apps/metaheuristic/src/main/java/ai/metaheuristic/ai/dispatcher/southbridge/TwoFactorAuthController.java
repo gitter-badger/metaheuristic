@@ -89,6 +89,7 @@ public class TwoFactorAuthController {
     }
 
     @RequestMapping(method = RequestMethod.POST)
+    @PreAuthorize("hasAnyRole('MASTER_ADMIN')")
     public String submit(@Valid @ModelAttribute("form") TwoFactorAuthController.TwoFactorAuthForm form, BindingResult bindingResult, Model uiModel) {
 
         validateMore(form, bindingResult);
@@ -121,13 +122,13 @@ public class TwoFactorAuthController {
         return "2fa/thanks";
     }
 
-    private void validateMore(TwoFactorAuthForm form, BindingResult bindingResult) {
+    private static void validateMore(TwoFactorAuthForm form, BindingResult bindingResult) {
         if (!StringUtils.isNumeric(form.getCode())) {
             bindingResult.rejectValue("code", "label_2step_auth_code_has_to_contain_digit");
         }
     }
 
-    private void populateEditForm(Model uiModel, TwoFactorAuthForm form) {
+    private static void populateEditForm(Model uiModel, TwoFactorAuthForm form) {
         uiModel.addAttribute("form", form);
     }
 }
