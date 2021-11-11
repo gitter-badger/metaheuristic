@@ -35,12 +35,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author Serge
@@ -62,7 +62,6 @@ public class ExecContextReadinessService {
     private final ExecContextReconciliationTopLevelService execContextReconciliationTopLevelService;
     private final ExecContextRepository execContextRepository;
     private final ExecContextReadinessStateService execContextReadinessStateService;
-    private final ApplicationEventPublisher eventPublisher;
 
     private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
     private final LinkedList<Long> queue = new LinkedList<>();
@@ -70,11 +69,12 @@ public class ExecContextReadinessService {
     @PostConstruct
     public void postConstruct() {
         final List<Long> ids = execContextRepository.findIdsByExecState(EnumsApi.ExecContextState.STARTED.code);
+        log.info("Started execContextIds: " + ids);
         execContextReadinessStateService.addAll(ids);
         for (Long notReadyExecContextId : ids) {
             putToQueue(notReadyExecContextId);
         }
-        eventPublisher.publishEvent(new StartProcessReadinessEvent());
+        log.info("postConstruct(), queue: {}", getIdsFromQueue());
     }
 
     private void putToQueue(final Long execContextId) {
@@ -93,12 +93,18 @@ public class ExecContextReadinessService {
         }
     }
 
-    @SuppressWarnings("unused")
+    private List<Long> getIdsFromQueue() {
+        synchronized (queue) {
+            return new ArrayList<>(queue);
+        }
+    }
+
     @Async
     @EventListener
     @SneakyThrows
     public void checkReadiness(StartProcessReadinessEvent event) {
-        TimeUnit.SECONDS.sleep(5);
+//        TimeUnit.SECONDS.sleep(5);
+        log.info("checkReadiness() here, queue: {}", getIdsFromQueue());
         executor.submit(() -> {
             Long execContextId;
             while ((execContextId = pullFromQueue()) != null) {
@@ -111,7 +117,7 @@ public class ExecContextReadinessService {
     public void prepare(Long execContextId) {
         Map<Long, TaskApiData.TaskState> states = execContextService.getExecStateOfTasks(execContextId);
         for (Map.Entry<Long, TaskApiData.TaskState> entry : states.entrySet()) {
-            if (entry.getValue().execState == EnumsApi.TaskExecState.NONE.value || entry.getValue().execState == EnumsApi.TaskExecState.CHECK_CACHE.value || entry.getValue().execState == EnumsApi.TaskExecState.IN_PROGRESS.value) {
+            if (!EnumsApi.TaskExecState.isFinishedState(entry.getValue().execState)) {
                 final Long taskId = entry.getKey();
                 taskProviderTopLevelService.registerTask(execContextId, taskId);
                 if (entry.getValue().execState == EnumsApi.TaskExecState.IN_PROGRESS.value) {
