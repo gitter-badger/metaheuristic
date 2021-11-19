@@ -184,7 +184,7 @@ public class FunctionTopLevelService {
 
         File tempDir = null;
         try {
-            tempDir = DirUtils.createTempDir("function-upload-");
+            tempDir = DirUtils.createMhTempDir("function-upload-");
             if (tempDir==null || tempDir.isFile()) {
                 return new OperationStatusRest(EnumsApi.OperationStatus.ERROR,
                         "#424.060 can't create temporary directory in " + location);
@@ -222,11 +222,11 @@ public class FunctionTopLevelService {
         return OperationStatusRest.OPERATION_STATUS_OK;
     }
 
-    private List<String> toErrorMessages(List<FunctionApiData.FunctionConfigStatus> statuses) {
+    private static List<String> toErrorMessages(List<FunctionApiData.FunctionConfigStatus> statuses) {
         return statuses.stream().filter(o->!o.isOk).map(o->o.error).collect(Collectors.toList());
     }
 
-    private boolean isError(List<FunctionApiData.FunctionConfigStatus> statuses) {
+    private static boolean isError(List<FunctionApiData.FunctionConfigStatus> statuses) {
         return statuses.stream().filter(o->!o.isOk).findFirst().orElse(null)!=null;
     }
 
