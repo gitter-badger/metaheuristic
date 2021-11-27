@@ -14,34 +14,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ai.metaheuristic.ai;
+package ai.metaheuristic.ai.dispatcher.event;
 
-import ai.metaheuristic.commons.stat.ExecutionStat;
 import lombok.AllArgsConstructor;
 
 /**
  * @author Serge
- * Date: 12/17/2020
- * Time: 8:19 PM
+ * Date: 11/24/2021
+ * Time: 5:47 PM
  */
 @AllArgsConstructor
-public class MetaheuristicThreadLocal {
-
-    public static final ThreadLocal<Boolean> schedule = ThreadLocal.withInitial(()->false);
-
-    public static void setSchedule() {
-        schedule.set(true);
-    }
-
-    public static void checkScheduler() {
-        if (!schedule.get()) {
-            throw new IllegalStateException("THis method must be used only in scheduler");
-        }
-    }
-
-    private static final ThreadLocal<ExecutionStat> executionStat =  ThreadLocal.withInitial(ExecutionStat::new);
-
-    public static ExecutionStat getExecutionStat() {
-        return executionStat.get();
-    }
+public class ResetTaskEvent {
+    public final Long execContextId;
+    public final Long taskId;
 }
