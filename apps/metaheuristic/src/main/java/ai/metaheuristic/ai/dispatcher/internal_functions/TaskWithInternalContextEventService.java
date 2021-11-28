@@ -73,7 +73,6 @@ public class TaskWithInternalContextEventService {
     private final ExecContextFSM execContextFSM;
     private final TaskRepository taskRepository;
 
-    private final InternalFunctionProcessor internalFunctionProcessor;
     private final TaskService taskService;
     private final ExecContextVariableService execContextVariableService;
     private final VariableService variableService;
@@ -86,7 +85,6 @@ public class TaskWithInternalContextEventService {
     private final TaskFinishingService taskFinishingService;
     private final ApplicationEventPublisher eventPublisher;
 
-    public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_ACTIVE_THREAD = 1;
     // number of active executers with different execContextId
     private static final int MAX_NUMBER_EXECUTORS = 2;
@@ -279,7 +277,7 @@ public class TaskWithInternalContextEventService {
                 int i=0;
             }
             if (notSkip) {
-                boolean isLongRunning = internalFunctionProcessor.process(simpleExecContext, taskId, taskParamsYaml.task.taskContextId, taskParamsYaml);
+                boolean isLongRunning = InternalFunctionProcessor.process(simpleExecContext, taskId, taskParamsYaml.task.taskContextId, taskParamsYaml);
                 if (!isLongRunning) {
                     taskWithInternalContextService.storeResult(taskId, taskParamsYaml);
                 }
